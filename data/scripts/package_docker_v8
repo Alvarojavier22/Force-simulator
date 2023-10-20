@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+
+BOLD=$(tput bold)
+RESET=$(tput sgr0)
+
+# exit on error and when undefined variables are accessed
+set -euo pipefail
+
+usage() {
+    echo "Usage: $(basename "${BASH_SOURCE[0]}") <image tag>"
+    exit 1
+}
+
+if [[ $# -ne 1 ]]; then
+    usage
+fi
+
+function cleanup() {
+    echo "${BOLD}Cleaning up${RESET}"
+    rm -rf libs
+    if [[ -n "${id+x}" ]]; then
+        sudo docker rm -v "$id"
+    fi
+    rm -f v8.tar
+}
+trap cleanup EXIT
+
+if [[ -e "libs" ]]; then
+    echo "'libs' directory already exists in the current folder. It would be overwritten"
+    exit 1
+fi
+mkdir libs
+
+tag=$1
+
+echo "${BOLD}Creating container${RESET}"
+id="$(sudo docker create roboticserlangen/v8:"$tag")"
+
+echo "${BOLD}Copying out V8${RESET}"
+# Warning, that > is not affected by sudo.
+# This is deliberate to let the resulting file be owned by the caller
+# shellcheck disable=SC2024
+sudo docker cp "$id":/v8 - >v8.tar
+tar xf v8.tar -C libs
+
+echo "${BOLD}Packaging V8 into 'v8-${tag}.tar.gz'${RESET}"
+tar cfz "v8-${tag}.tar.gz" libs
